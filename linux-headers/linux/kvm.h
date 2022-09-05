@@ -540,6 +540,11 @@ struct kvm_coalesced_mmio_ring {
 	struct kvm_coalesced_mmio coalesced_mmio[0];
 };
 
+struct kvm_shm_parm {
+	__u64 uva_start;
+	__u64 uva_size;
+};
+
 #define KVM_COALESCED_MMIO_MAX \
 	((PAGE_SIZE - sizeof(struct kvm_coalesced_mmio_ring)) / \
 	 sizeof(struct kvm_coalesced_mmio))
@@ -2065,5 +2070,7 @@ struct kvm_stats_desc {
 
 /* Available with KVM_CAP_XSAVE2 */
 #define KVM_GET_XSAVE2		  _IOR(KVMIO,  0xcf, struct kvm_xsave)
+
+#define KVM_REG_SHARED_MEM  _IOR(KVMIO,  0xd2, struct kvm_shm_parm)
 
 #endif /* __LINUX_KVM_H */

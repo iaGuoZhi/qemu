@@ -357,6 +357,13 @@ int kvm_physical_memory_addr_from_host(KVMState *s, void *ram,
     return ret;
 }
 
+/* SHM layout:
+ * 8G <-> 8G + 1M
+ */
+static __u64 SHM_BASE = 8UL << 30;
+static __u64 SHM_SIZE = 1UL << 20;
+static bool has_shm = false;
+
 static int kvm_set_user_memory_region(KVMMemoryListener *kml, KVMSlot *slot, bool new)
 {
     KVMState *s = kvm_state;
@@ -380,6 +387,33 @@ static int kvm_set_user_memory_region(KVMMemoryListener *kml, KVMSlot *slot, boo
     mem.memory_size = slot->memory_size;
     ret = kvm_vm_ioctl(s, KVM_SET_USER_MEMORY_REGION, &mem);
     slot->old_flags = mem.flags;
+
+    if (mem.guest_phys_addr <= SHM_BASE &&
+        SHM_BASE + SHM_SIZE <= (mem.guest_phys_addr + mem.memory_size) && !has_shm) {
+        struct kvm_shm_parm parm;
+        void *shm = (void *)mem.userspace_addr +
+            SHM_BASE - mem.guest_phys_addr;
+
+        printf("%s:%d gpa %llx size %llx, flags %x\n",
+            __func__, __LINE__,
+            mem.guest_phys_addr, mem.memory_size, mem.flags);
+
+        parm.uva_start = (uint64_t)shm;
+        parm.uva_size = SHM_SIZE;
+        ret = kvm_vm_ioctl(s, KVM_REG_SHARED_MEM, &parm);
+        printf("%s:%d register %llx len %llx ret %d\n", __func__, __LINE__,
+               (__u64)shm, SHM_SIZE, ret);
+
+        printf("\t content from KVM %x %x %x\n", *(int *)shm, *(int *)(shm + (1UL << 10)),
+               *(int *)(shm + (1UL << 11)));
+        *(int *)shm = 0x1234;
+        *(int *)(shm + (1UL << 10)) = 0x4321;
+        *(int *)(shm + (1UL << 11)) = 0x1234abcd;
+        printf("\t content to VM %x %x %x\n",
+               *(int *)shm, *(int *)(shm + (1UL << 10)),
+               *(int *)(shm + (1UL << 11)));
+	has_shm = true;
+    }
 err:
     trace_kvm_set_user_memory(mem.slot, mem.flags, mem.guest_phys_addr,
                               mem.memory_size, mem.userspace_addr, ret);
